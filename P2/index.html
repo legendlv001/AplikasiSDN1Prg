@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aplikasi Rekap Kehadiran Guru</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- html2pdf.js for high quality PDF Generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f1f5f9;
+        }
+
+        /* Styling spesifik untuk tampilan kertas / dokumen Times New Roman F4 (215mm x 330mm) */
+        .document-preview {
+            font-family: 'Times New Roman', Times, serif;
+            background: #ffffff;
+            color: #000000;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+            width: 215mm;
+            min-height: 330mm;
+            margin: 0 auto;
+            box-sizing: border-box;
+            padding: 8mm 10mm;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+        }
+
+        .document-preview table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        .document-preview th, .document-preview td {
+            border: 1px solid #000000;
+            padding: 1px 3px;
+            font-size: 10px;
+            line-height: 1.1;
+        }
+
+        .cell-input {
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            background: transparent;
+            border: none;
+            outline: none;
+            font-family: 'Times New Roman', Times, serif;
+            font-size: 10.5px;
+            font-weight: bold;
+        }
+
+        .cell-input:focus {
+            background-color: #e0e7ff;
+        }
+
+        /* Styling khusus cetak & PDF */
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            body {
+                background: white !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+            .document-container {
+                box-shadow: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                width: 100% !important;
+            }
+            .document-preview {
+                width: 215mm !important;
+                min-height: 330mm !important;
+                box-shadow: none !important;
+                margin: 0 auto !important;
+                padding: 8mm 10mm !important;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen pb-12">
+
+    <header class="bg-indigo-900 text-white shadow-md sticky top-0 z-40 no-print">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <!-- Brand / Title -->
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-indigo-700/80 border border-indigo-500/50 flex items-center justify-center text-indigo-200 shadow-inner">
+                    <i class="fa-solid fa-clipboard-user text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-base sm:text-lg font-bold leading-tight tracking-wide">Rekap Kehadiran Guru</h1>
+                </div>
+            </div>
+
+            <!-- Header Action Buttons (Pojok Kanan Atas) -->
+            <div class="flex items-center gap-2">
+                <button onclick="clearTableData()" class="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold rounded-lg transition flex items-center gap-2 shadow-sm border border-amber-500">
+                    <i class="fa-solid fa-eraser text-sm"></i>
+                    <span>Bersihkan</span>
+                </button>
+                <button onclick="downloadPDF()" class="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold rounded-lg transition flex items-center gap-2 shadow-sm border border-rose-500">
+                    <i class="fa-solid fa-file-pdf text-sm"></i>
+                    <span>Save Pdf</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- Left Panel: Control Panel & Options -->
+            <div class="lg:col-span-4 space-y-4 no-print">
+                <div class="bg-amber-50 rounded-xl border border-amber-200 p-4 text-amber-900 sticky top-20 shadow-sm space-y-3">
+                    <h3 class="font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 border-b border-amber-200 pb-2">
+                        <i class="fa-solid fa-sliders text-amber-600"></i> Opsi & Panduan Pengisian Kode
+                    </h3>
+
+                    <!-- Pilih Data Guru dari Sheet Guru -->
+                    <div class="bg-white p-3 rounded-lg border border-amber-200 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <label class="block text-xs font-bold text-slate-800">
+                                <i class="fa-solid fa-user-tie text-indigo-600 mr-1"></i> Data Guru:
+                            </label>
+                            <button onclick="fetchSpreadsheetData()" class="text-[10px] font-semibold text-indigo-700 hover:text-indigo-900 underline flex items-center gap-1">
+                                <i class="fa-solid fa-rotate text-xs"></i> Muat Ulang
+                            </button>
+                        </div>
+                        <select id="cfg_select_guru" onchange="onGuruSelectChange()" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500 bg-white font-medium text-slate-700">
+                            <option value="" disabled selected>-- Pilih Guru Dari List --</option>
+                        </select>
+                        <p id="guru-fetch-status" class="text-[10px] text-slate-500 italic">Mengambil data dari Google Sheets...</p>
+                    </div>
+
+                    <!-- Tipe Kelas Selection -->
+                    <div class="bg-white p-3 rounded-lg border border-amber-200 space-y-2">
+                        <label class="block text-xs font-bold text-slate-800">Tipe Kelas:</label>
+                        <select id="cfg_mode_kelas" onchange="switchModeKelas()" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500 bg-slate-50 font-semibold text-slate-700">
+                            <option value="mapel">Kelas Mapel (Simbol ✓, X, +)</option>
+                            <option value="reguler" selected>Kelas Reguler (Kode Angka 1-13)</option>
+                            <option value="kustom">Kelas Kustom (Dapat Di-edit)</option>
+                        </select>
+                    </div>
+
+                    <!-- Bulan & Tahun Selection -->
+                    <div class="bg-white p-3 rounded-lg border border-amber-200 space-y-2">
+                        <label class="block text-xs font-bold text-slate-800">Periode Waktu:</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <select id="cfg_bulan" onchange="generateDates(); updateDocument();" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500 bg-white">
+                                    <option value="0">Januari</option>
+                                    <option value="1">Februari</option>
+                                    <option value="2">Maret</option>
+                                    <option value="3">April</option>
+                                    <option value="4">Mei</option>
+                                    <option value="5">Juni</option>
+                                    <option value="6">Juli</option>
+                                    <option value="7">Agustus</option>
+                                    <option value="8">September</option>
+                                    <option value="9" selected>Oktober</option>
+                                    <option value="10">November</option>
+                                    <option value="11">Desember</option>
+                                </select>
+                            </div>
+                            <div>
+                                <input type="number" id="cfg_tahun" value="2026" oninput="generateDates(); updateDocument();" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500 bg-white">
+                            </div>
+                        </div>
+                    </div>
+
+                    <p class="text-[11px] text-amber-800">Klik sel jam pelajaran pada tabel, lalu tekan tombol opsi di bawah ini:</p>
+
+                    <!-- Quick Input Symbol Buttons (Dynamic Container) -->
+                    <div id="quick-input-buttons" class="max-h-64 overflow-y-auto pr-1 space-y-2">
+                        <!-- Rendered by JS based on Mode -->
+                    </div>
+
+                    <div id="keyboard-shortcut-info" class="bg-amber-100/60 p-2.5 rounded-lg border border-amber-200 text-[11px] text-amber-800 space-y-1">
+                        <p class="font-semibold"><i class="fa-solid fa-keyboard mr-1"></i> Shortcut Keyboard:</p>
+                        <div id="shortcut-details">
+                            <!-- Rendered by JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-8 document-container overflow-x-auto">
+                <!-- Printable Page Wrapper (F4 Size Preview: 215mm x 330mm) -->
+                <div id="document-to-print" class="document-preview mx-auto rounded-sm border border-slate-300">
+                    
+                    <div class="space-y-1.5">
+                        <!-- Document Header -->
+                        <div class="text-center font-bold tracking-wide uppercase leading-tight">
+                            <h2 id="doc_judul" class="text-sm sm:text-base">REKAPITULASI KEHADIRAN GURU</h2>
+                            <h3 id="doc_subjudul" class="text-xs sm:text-sm">DALAM .......</h3>
+                            <h3 id="doc_sekolah" class="text-xs sm:text-sm">SD NEGERI 1 PARIGI</h3>
+                        </div>
+
+                        <!-- Info Metadata Guru & Bulan -->
+                        <div class="text-xs font-bold space-y-0.5 pt-0.5">
+                            <div class="flex">
+                                <span class="w-32">Nama Guru</span>
+                                <span class="mr-2">:</span>
+                                <span id="doc_nama_guru">............</span>
+                            </div>
+                            <div class="flex">
+                                <span class="w-32">Bulan / Tahun</span>
+                                <span class="mr-2">:</span>
+                                <span id="doc_bulan_tahun">Oktober/2026</span>
+                            </div>
+                        </div>
+
+                        <!-- Table Presisi Kehadiran Jam 1 - 11 -->
+                        <div class="overflow-x-auto pt-0.5">
+                            <table class="w-full text-center align-middle">
+                                <thead>
+                                    <tr>
+                                        <th rowspan="2" class="w-6 py-0.5">No</th>
+                                        <th rowspan="2" class="w-32 py-0.5 text-left px-2">Hari / Tanggal</th>
+                                        <th colspan="11" class="py-0.5">Jam Pelajaran</th>
+                                        <th rowspan="2" class="w-20 py-0.5">Keterangan</th>
+                                    </tr>
+                                    <tr>
+                                        <th class="w-4 py-0.5 text-[9px]">1</th>
+                                        <th class="w-4 py-0.5 text-[9px]">2</th>
+                                        <th class="w-4 py-0.5 text-[9px]">3</th>
+                                        <th class="w-4 py-0.5 text-[9px]">4</th>
+                                        <th class="w-4 py-0.5 text-[9px]">5</th>
+                                        <th class="w-4 py-0.5 text-[9px]">6</th>
+                                        <th class="w-4 py-0.5 text-[9px]">7</th>
+                                        <th class="w-4 py-0.5 text-[9px]">8</th>
+                                        <th class="w-4 py-0.5 text-[9px]">9</th>
+                                        <th class="w-4 py-0.5 text-[9px]">10</th>
+                                        <th class="w-4 py-0.5 text-[9px]">11</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="attendance-body">
+                                    <!-- Dynamic Rows Generated by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Keterangan Legend Section -->
+                        <div id="document-legend" class="text-[9px] space-y-0 leading-tight pt-1">
+                            <!-- Dynamic Legend rendered by JS -->
+                        </div>
+                    </div>
+
+                    <!-- 2 Enter spacing before signature section -->
+                    <div class="pt-2"></div>
+
+                    <!-- Signature Footer Section (Positioned closely right after legend) -->
+                    <div>
+                        <div class="flex justify-between items-start text-xs font-bold px-2">
+                            <!-- Left Signature (Kepala Sekolah) -->
+                            <div class="text-left w-52 space-y-12">
+                                <div>
+                                    <p>Mengetahui:</p>
+                                    <p>Kepala Sekolah,</p>
+                                </div>
+                                <div class="space-y-0">
+                                    <p id="doc_nama_kepsek" class="font-bold">............</p>
+                                    <p class="font-normal text-[10.5px]">NIP. <span id="doc_nip_kepsek">............</span></p>
+                                </div>
+                            </div>
+
+                            <!-- Right Signature (Guru) - Shifted slightly left -->
+                            <div class="text-left w-52 space-y-12 pr-12">
+                                <div class="space-y-0">
+                                    <p>&nbsp;</p>
+                                    <p id="doc_jabatan_guru">Guru</p>
+                                </div>
+                                <div class="space-y-0">
+                                    <p id="doc_nama_guru_ttd" class="font-bold">............</p>
+                                    <p class="font-normal text-[10.5px]">NIP. <span id="doc_nip_guru">............</span></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Modal Notification -->
+    <div id="app-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center hidden no-print">
+        <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-5 text-center space-y-4 border border-slate-100">
+            <div id="modal-icon" class="w-12 h-12 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center mx-auto text-xl">
+                <i class="fa-solid fa-circle-check"></i>
+            </div>
+            <p id="modal-message" class="text-sm font-medium text-slate-700"></p>
+            <button onclick="closeModal()" class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition">
+                OK
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const monthNames = [
+            "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+            "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+        ];
+
+        const dayNames = [
+            "Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"
+        ];
+
+        const mapelItems = [
+            { symbol: '✓', label: 'Pendidikan Agama Islam dan Budi Pekerti', color: 'text-emerald-600' },
+            { symbol: 'X', label: 'Mapel Umum', color: 'text-indigo-600' },
+            { symbol: '+', label: 'KKG PAI dan Lainnya', color: 'text-amber-600' }
+        ];
+
+        const regulerItems = [
+            { symbol: '1', label: 'Pendidikan Agama Islam dan Budi Pekerti' },
+            { symbol: '2', label: 'Pendidikan Pancasila dan Kewarganegaraan' },
+            { symbol: '3', label: 'Bahasa Indonesia' },
+            { symbol: '4', label: 'Matematika' },
+            { symbol: '5', label: 'IPAS' },
+            { symbol: '6', label: 'PJOK' },
+            { symbol: '7', label: 'Seni Rupa' },
+            { symbol: '8', label: 'Bahasa Inggris' },
+            { symbol: '9', label: 'Bahasa Banjar' },
+            { symbol: '10', label: 'BTAQ' },
+            { symbol: '11', label: 'KKA' },
+            { symbol: '12', label: 'Bimbingan TKA' },
+            { symbol: '13', label: 'Bimbingan OSN' }
+        ];
+
+        let customItems = [
+            { symbol: '✓', label: 'Pendidikan Agama Islam dan Budi Pekerti' },
+            { symbol: 'X', label: 'Mata Pelajaran Umum' },
+            { symbol: '+', label: 'Kegiatan Ekstrakurikuler / KKG' }
+        ];
+
+        const nationalHolidays = {
+            "01-01": "Tahun Baru Masehi",
+            "05-01": "Hari Buruh",
+            "06-01": "Hari Lahir Pancasila",
+            "08-17": "Hari Kemerdekaan RI",
+            "12-25": "Hari Raya Natal"
+        };
+
+        let activeInputCell = null;
+        let teacherListOnly = [];
+        let selectedTeacherData = {
+            nama: "",
+            nip: "",
+            jabatan: ""
+        };
+
+        window.addEventListener('DOMContentLoaded', () => {
+            switchModeKelas();
+            generateDates();
+            updateDocument();
+            fetchSpreadsheetData();
+        });
+
+        async function fetchSpreadsheetData() {
+            const statusEl = document.getElementById('guru-fetch-status');
+            const selectEl = document.getElementById('cfg_select_guru');
+
+            statusEl.innerText = "Mengambil data dari Google Sheets...";
+            statusEl.className = "text-[10px] text-indigo-600 italic";
+            
+            const spreadsheetId = '1dHd8-ixTrO8kjj_ThpKcE5BZX5c5SnVRS2m6PSzpwMg';
+            const csvGuruUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Guru')}`;
+
+            try {
+                const resGuru = await fetch(csvGuruUrl);
+                if (resGuru.ok) {
+                    const csvText = await resGuru.text();
+                    const allRows = parseCSV(csvText);
+                    
+                    teacherListOnly = [];
+                    allRows.forEach(row => {
+                        const jabLower = (row.jabatan || '').toLowerCase();
+                        const namaLower = (row.nama || '').toLowerCase();
+                        if (jabLower.includes('kepala sekolah') || namaLower.includes('kepala sekolah')) {
+                            if (row.nama) document.getElementById('doc_nama_kepsek').innerText = row.nama;
+                            if (row.nip) document.getElementById('doc_nip_kepsek').innerText = row.nip;
+                        } else {
+                            teacherListOnly.push(row);
+                        }
+                    });
+
+                    selectEl.innerHTML = '<option value="" disabled selected>-- Pilih Guru Dari List --</option>';
+                    teacherListOnly.forEach((guru, idx) => {
+                        const opt = document.createElement('option');
+                        opt.value = idx;
+                        opt.innerText = `${guru.nama || 'Tanpa Nama'} ${guru.nip ? '(' + guru.nip + ')' : ''}`;
+                        selectEl.appendChild(opt);
+                    });
+                }
+
+                statusEl.innerText = `Berhasil memuat data spreadsheet.`;
+                statusEl.className = "text-[10px] text-emerald-600 font-medium";
+            } catch (err) {
+                console.error("Error fetching spreadsheet:", err);
+                statusEl.innerText = "Gagal memuat spreadsheet. Menggunakan data bawaan.";
+                statusEl.className = "text-[10px] text-rose-600 font-medium";
+            }
+        }
+
+        function parseCSV(text) {
+            const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            if (lines.length < 2) return [];
+
+            const parseRow = (rowStr) => {
+                const result = [];
+                let insideQuotes = false;
+                let currentVal = '';
+                for (let i = 0; i < rowStr.length; i++) {
+                    const char = rowStr[i];
+                    if (char === '"') {
+                        insideQuotes = !insideQuotes;
+                    } else if (char === ',' && !insideQuotes) {
+                        result.push(currentVal.replace(/^"|"$/g, '').trim());
+                        currentVal = '';
+                    } else {
+                        currentVal += char;
+                    }
+                }
+                result.push(currentVal.replace(/^"|"$/g, '').trim());
+                return result;
+            };
+
+            const headers = parseRow(lines[0]).map(h => h.toLowerCase());
+            
+            const idxNama = headers.findIndex(h => h.includes('nama'));
+            const idxNip = headers.findIndex(h => h.includes('nip'));
+            const idxJabatan = headers.findIndex(h => h.includes('jabatan') || h.includes('mapel') || h.includes('kelas') || h.includes('keterangan'));
+
+            const idxNamaKepsek = headers.findIndex(h => h.includes('kepala') || h.includes('kepsek') || (h.includes('nama') && h.includes('kepala')));
+            const idxNipKepsek = headers.findIndex(h => h.includes('nip') && (h.includes('kepala') || h.includes('kepsek')));
+
+            const result = [];
+            for (let i = 1; i < lines.length; i++) {
+                const cols = parseRow(lines[i]);
+                if (cols.length === 0) continue;
+
+                const nama = idxNama !== -1 ? cols[idxNama] : cols[0] || '';
+                const nip = idxNip !== -1 ? cols[idxNip] : cols[1] || '';
+                const jabatan = idxJabatan !== -1 ? cols[idxJabatan] : cols[2] || '';
+                
+                const namaKepsek = idxNamaKepsek !== -1 ? cols[idxNamaKepsek] : '';
+                const nipKepsek = idxNipKepsek !== -1 ? cols[idxNipKepsek] : '';
+
+                const jabLower = jabatan.toLowerCase();
+
+                if (namaKepsek || jabLower.includes('kepala sekolah')) {
+                    if (namaKepsek) document.getElementById('doc_nama_kepsek').innerText = namaKepsek;
+                    else if (nama) document.getElementById('doc_nama_kepsek').innerText = nama;
+                    if (nipKepsek) document.getElementById('doc_nip_kepsek').innerText = nipKepsek;
+                    else if (nip) document.getElementById('doc_nip_kepsek').innerText = nip;
+                }
+
+                if (nama) {
+                    result.push({ nama, nip, jabatan });
+                }
+            }
+            return result;
+        }
+
+        function onGuruSelectChange() {
+            const selectEl = document.getElementById('cfg_select_guru');
+            const selectedIdx = selectEl.value;
+
+            if (selectedIdx === "" || !teacherListOnly[selectedIdx]) return;
+
+            const selectedGuru = teacherListOnly[selectedIdx];
+            selectedTeacherData.nama = selectedGuru.nama || '';
+            selectedTeacherData.nip = selectedGuru.nip || '';
+            selectedTeacherData.jabatan = selectedGuru.jabatan || '';
+
+            syncClassWithGuruJabatan(selectedTeacherData.jabatan);
+            updateDocument();
+        }
+
+        function syncClassWithGuruJabatan(jabatan) {
+            if (!jabatan) return;
+            const modeSelect = document.getElementById('cfg_mode_kelas');
+            const jabLower = jabatan.toLowerCase();
+
+            if (jabLower.includes('mapel') || jabLower.includes('pai') || jabLower.includes('pjok') || jabLower.includes('inggris')) {
+                modeSelect.value = 'mapel';
+            } else if (jabLower.includes('kelas') || jabLower.includes('reguler') || jabLower.includes('1') || jabLower.includes('2') || jabLower.includes('3') || jabLower.includes('4') || jabLower.includes('5') || jabLower.includes('6')) {
+                modeSelect.value = 'reguler';
+            } else {
+                modeSelect.value = 'kustom';
+            }
+
+            switchModeKelas();
+        }
+
+        function switchModeKelas() {
+            const mode = document.getElementById('cfg_mode_kelas').value;
+            const btnContainer = document.getElementById('quick-input-buttons');
+            const shortcutDetails = document.getElementById('shortcut-details');
+
+            btnContainer.innerHTML = '';
+
+            if (mode === 'mapel') {
+                mapelItems.forEach(item => {
+                    const btn = document.createElement('button');
+                    btn.onclick = () => applySymbolToActive(item.symbol);
+                    btn.className = 'w-full p-2 bg-white hover:bg-amber-100 border border-amber-300 rounded-lg flex items-center justify-between text-xs font-bold transition shadow-sm';
+                    btn.innerHTML = `<span class="text-xs text-slate-700 font-normal truncate">${item.label}</span>
+                                     <span class="text-base leading-none font-bold ${item.color}">${item.symbol}</span>`;
+                    btnContainer.appendChild(btn);
+                });
+
+                shortcutDetails.innerHTML = `
+                    <p>Ketik <kbd class="px-1 bg-white rounded border">v</kbd> &rarr; otomatis <b class="text-emerald-700">✓</b></p>
+                    <p>Ketik <kbd class="px-1 bg-white rounded border">x</kbd> &rarr; otomatis <b class="text-indigo-700">X</b></p>
+                    <p>Ketik <kbd class="px-1 bg-white rounded border">+</kbd> &rarr; otomatis <b class="text-amber-700">+</b></p>
+                `;
+            } else if (mode === 'reguler') {
+                regulerItems.forEach(item => {
+                    const btn = document.createElement('button');
+                    btn.onclick = () => applySymbolToActive(item.symbol);
+                    btn.className = 'w-full p-1.5 bg-white hover:bg-amber-100 border border-amber-300 rounded-lg flex items-center justify-between text-xs transition shadow-sm';
+                    btn.innerHTML = `<span class="text-xs text-slate-700 truncate">${item.symbol}. ${item.label}</span>
+                                     <span class="text-xs font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">${item.symbol}</span>`;
+                    btnContainer.appendChild(btn);
+                });
+
+                shortcutDetails.innerHTML = `<p>Ketik nomor <kbd class="px-1 bg-white rounded border">1-13</kbd> langsung di dalam tabel jam pelajaran.</p>`;
+            } else if (mode === 'kustom') {
+                renderCustomModeEditors();
+                shortcutDetails.innerHTML = `<p>Ketik simbol/nomor kustom yang telah Anda buat pada bidang pilihan di atas.</p>`;
+            }
+
+            renderLegend();
+        }
+
+        function renderCustomModeEditors() {
+            const btnContainer = document.getElementById('quick-input-buttons');
+            btnContainer.innerHTML = '';
+
+            const titleP = document.createElement('p');
+            titleP.className = 'text-[11px] font-bold text-indigo-900 mb-1';
+            titleP.innerText = 'Edit Simbol & Keterangan Kustom:';
+            btnContainer.appendChild(titleP);
+
+            customItems.forEach((item, idx) => {
+                const box = document.createElement('div');
+                box.className = 'p-2 bg-white rounded-lg border border-amber-300 space-y-1.5 shadow-sm';
+
+                box.innerHTML = `
+                    <div class="flex items-center gap-1.5">
+                        <input type="text" value="${item.symbol}" oninput="updateCustomItem(${idx}, 'symbol', this.value)" class="w-12 px-1.5 py-1 text-center font-bold text-xs border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 bg-slate-50" placeholder="Simbol" />
+                        <input type="text" value="${item.label}" oninput="updateCustomItem(${idx}, 'label', this.value)" class="flex-1 px-2 py-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500" placeholder="Keterangan..." />
+                        <button onclick="applySymbolToActive('${item.symbol}')" title="Terapkan ke sel aktif" class="px-2 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded text-xs font-bold transition">
+                            <i class="fa-solid fa-arrow-right"></i>
+                        </button>
+                    </div>
+                `;
+                btnContainer.appendChild(box);
+            });
+
+            const addBtn = document.createElement('button');
+            addBtn.onclick = addCustomItemRow;
+            addBtn.className = 'w-full py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition';
+            addBtn.innerHTML = '<i class="fa-solid fa-plus text-xs"></i> Tambah Opsi Kustom';
+            btnContainer.appendChild(addBtn);
+        }
+
+        function updateCustomItem(index, key, val) {
+            if (customItems[index]) {
+                customItems[index][key] = val;
+                renderLegend();
+            }
+        }
+
+        function addCustomItemRow() {
+            customItems.push({ symbol: '?', label: 'Keterangan Kustom Baru' });
+            renderCustomModeEditors();
+            renderLegend();
+        }
+
+        function renderLegend() {
+            const mode = document.getElementById('cfg_mode_kelas').value;
+            const legendContainer = document.getElementById('document-legend');
+            
+            legendContainer.innerHTML = '<p class="font-bold">Keterangan :</p><p>Kolom Jam Pelajaran diisi:</p>';
+
+            let activeList = [];
+            if (mode === 'mapel') activeList = mapelItems;
+            else if (mode === 'reguler') activeList = regulerItems;
+            else if (mode === 'kustom') activeList = customItems;
+
+            activeList.forEach(item => {
+                const p = document.createElement('p');
+                p.className = 'pl-2';
+                p.innerText = `${item.symbol} = ${item.label}`;
+                legendContainer.appendChild(p);
+            });
+        }
+
+        function showAlert(message, type = 'warning') {
+            const modal = document.getElementById('app-modal');
+            const msgEl = document.getElementById('modal-message');
+            const iconEl = document.getElementById('modal-icon');
+
+            msgEl.innerText = message;
+            if (type === 'warning') {
+                iconEl.className = 'w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto text-xl';
+                iconEl.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i>';
+            } else {
+                iconEl.className = 'w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto text-xl';
+                iconEl.innerHTML = '<i class="fa-solid fa-circle-check"></i>';
+            }
+
+            modal.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('app-modal').classList.add('hidden');
+        }
+
+        function updateDocument() {
+            const bulanIdx = parseInt(document.getElementById('cfg_bulan').value);
+            const tahun = document.getElementById('cfg_tahun').value;
+
+            document.getElementById('doc_bulan_tahun').innerText = `${monthNames[bulanIdx]}/${tahun}`;
+            document.getElementById('doc_nama_guru').innerText = selectedTeacherData.nama || "............";
+            document.getElementById('doc_nama_guru_ttd').innerText = selectedTeacherData.nama || "............";
+            document.getElementById('doc_nip_guru').innerText = selectedTeacherData.nip || "............";
+
+            const rawJabatan = selectedTeacherData.jabatan || '';
+            if (rawJabatan) {
+                document.getElementById('doc_subjudul').innerText = `DALAM ${rawJabatan.toUpperCase()}`;
+                document.getElementById('doc_jabatan_guru').innerText = `Guru ${rawJabatan}`;
+            } else {
+                document.getElementById('doc_subjudul').innerText = `DALAM .......`;
+                document.getElementById('doc_jabatan_guru').innerText = `Guru`;
+            }
+        }
+
+        function generateDates() {
+            const bulanIdx = parseInt(document.getElementById('cfg_bulan').value);
+            const tahun = parseInt(document.getElementById('cfg_tahun').value);
+            const tbody = document.getElementById('attendance-body');
+            
+            tbody.innerHTML = '';
+
+            const daysInMonth = new Date(tahun, bulanIdx + 1, 0).getDate();
+            let rowNumber = 1;
+
+            for (let d = 1; d <= daysInMonth; d++) {
+                const dateObj = new Date(tahun, bulanIdx, d);
+                const dayOfWeek = dateObj.getDay();
+
+                const formattedMonth = String(bulanIdx + 1).padStart(2, '0');
+                const formattedDayNum = String(d).padStart(2, '0');
+                const monthDayKey = `${formattedMonth}-${formattedDayNum}`;
+
+                const isSunday = dayOfWeek === 0;
+                const isSaturday = dayOfWeek === 6;
+                const holidayName = nationalHolidays[monthDayKey];
+
+                if (isSunday || isSaturday || holidayName) {
+                    continue;
+                }
+
+                const formattedDayName = dayNames[dayOfWeek];
+                const monthName = monthNames[bulanIdx];
+                const dateString = `${formattedDayName}, ${formattedDayNum} ${monthName} ${tahun}`;
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition-colors";
+
+                const tdNo = document.createElement('td');
+                tdNo.className = "text-center font-normal";
+                tdNo.innerText = rowNumber;
+                tr.appendChild(tdNo);
+
+                const tdTanggal = document.createElement('td');
+                tdTanggal.className = "text-left px-2 font-normal whitespace-nowrap";
+                tdTanggal.innerText = dateString;
+                tr.appendChild(tdTanggal);
+
+                for (let j = 1; j <= 11; j++) {
+                    const tdJam = document.createElement('td');
+                    tdJam.className = "p-0 h-4 text-center relative";
+
+                    const input = document.createElement('input');
+                    input.type = "text";
+                    input.className = "cell-input";
+                    input.dataset.row = rowNumber;
+                    input.dataset.col = j;
+                    
+                    input.addEventListener('focus', function() {
+                        activeInputCell = this;
+                    });
+
+                    input.addEventListener('keydown', function(e) {
+                        const mode = document.getElementById('cfg_mode_kelas').value;
+                        if (mode === 'mapel') {
+                            if (e.key === 'v' || e.key === 'V') {
+                                e.preventDefault();
+                                this.value = '✓';
+                            } else if (e.key === 'x' || e.key === 'X') {
+                                e.preventDefault();
+                                this.value = 'X';
+                            } else if (e.key === '+') {
+                                e.preventDefault();
+                                this.value = '+';
+                            }
+                        }
+                    });
+
+                    tdJam.appendChild(input);
+                    tr.appendChild(tdJam);
+                }
+
+                const tdKet = document.createElement('td');
+                tdKet.className = "p-0 h-4";
+                const inputKet = document.createElement('input');
+                inputKet.type = "text";
+                inputKet.className = "cell-input text-left px-1 font-normal";
+
+                tdKet.appendChild(inputKet);
+                tr.appendChild(tdKet);
+
+                tbody.appendChild(tr);
+                rowNumber++;
+            }
+        }
+
+        function applySymbolToActive(symbol) {
+            if (activeInputCell) {
+                activeInputCell.value = symbol;
+                const nextTd = activeInputCell.parentElement.nextElementSibling;
+                if (nextTd && nextTd.querySelector('input') && !nextTd.querySelector('input').disabled) {
+                    nextTd.querySelector('input').focus();
+                }
+            } else {
+                showAlert("Silakan klik salah satu kotak jam pelajaran pada tabel terlebih dahulu.", "warning");
+            }
+        }
+
+        function clearTableData() {
+            const inputs = document.querySelectorAll('#attendance-body input');
+            inputs.forEach(input => {
+                input.value = '';
+            });
+            showAlert("Semua isian kehadiran pada tabel telah dibersihkan.", "success");
+        }
+
+        function downloadPDF() {
+            const element = document.getElementById('document-to-print');
+            const teacherNameRaw = selectedTeacherData.nama || "Guru";
+            const cleanGuruName = teacherNameRaw.replace(/[^a-zA-Z0-9]/g, "_");
+            const bulanIdx = parseInt(document.getElementById('cfg_bulan').value);
+            const tahun = document.getElementById('cfg_tahun').value;
+            const filename = `Rekap_Kehadiran_${cleanGuruName}_${monthNames[bulanIdx]}_${tahun}.pdf`;
+
+            const inputs = element.querySelectorAll('input');
+            inputs.forEach(input => {
+                input.setAttribute('value', input.value);
+            });
+
+            // F4 dimensions in mm: 215 x 330, exact single page fit
+            const opt = {
+                margin:       [4, 4, 4, 4],
+                filename:     filename,
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2, useCORS: true, logging: false },
+                jsPDF:        { unit: 'mm', format: [215, 330], orientation: 'portrait' }
+            };
+
+            html2pdf().set(opt).from(element).save();
+        }
+    </script>
+</body>
+</html>
