@@ -436,21 +436,6 @@ const regularClasses = classesList.filter(cls => !schoolData[cls]?.isSubCategory
 const subjectClasses = classesList.filter(cls => schoolData[cls]?.isSubCategory);
 let html = `
 <div class="space-y-6">
-<!-- Menu Angkat Nilai Ideal -->
-<div class="mb-4">
-<div class="flex flex-wrap items-center gap-2">
-<a href="https://legendlv001.github.io/RekapNilaiSdn1Prg/P1/" target="_blank" class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold text-sm rounded-xl shadow hover:shadow-md transition">
-<i class="fa-solid fa-chart-line"></i>
-<span>Angkat Nilai Ideal</span>
-<i class="fa-solid fa-arrow-up-right-from-square text-xs opacity-80"></i>
-</a>
-<a href="https://legendlv001.github.io/RekapNilaiSdn1Prg/P2/" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-semibold text-sm rounded-xl shadow hover:shadow-md transition">
-<i class="fa-solid fa-clipboard-user"></i>
-<span>Rekap Kehadiran</span>
-<i class="fa-solid fa-arrow-up-right-from-square text-xs opacity-80"></i>
-</a>
-</div>
-</div>
 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
 <h2 class="text-xl font-bold text-slate-800">Daftar Kelas</h2>
 <p class="text-slate-500 text-sm mt-1">Pilih salah satu kelas di bawah untuk melihat rincian siswa dan nilai.</p>
