@@ -3,14 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aplikasi Rekap Kehadiran Guru</title>
+    <title>Aplikasi Rekap Kehadiran Guru dengan TTD</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- html2pdf.js for high quality PDF Generation -->
+    <!-- html2canvas and html2pdf.js for high quality PDF Generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
     <style>
@@ -25,26 +26,39 @@
             background: #ffffff;
             color: #000000;
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
-            width: 215mm;
-            min-height: 330mm;
+            width: 205mm; /* Lebar area isi (215mm F4 - margin 0.5cm) */
+            max-width: 100%;
+            min-height: auto;
             margin: 0 auto;
             box-sizing: border-box;
-            padding: 8mm 10mm;
+            padding-top: 16px;
+            padding-bottom: 20px;
+            padding-right: 20px;
+            padding-left: 3.8cm; /* Ditambah 1cm lagi (total 3.8cm) agar stempel di sisi kiri leluasa dan tidak terpotong saat Save PDF */
             display: flex;
             flex-direction: column;
             justify-content: flex-start;
+            border: none !important;
+            overflow: visible !important;
         }
 
         .document-preview table {
             border-collapse: collapse;
             width: 100%;
+            table-layout: fixed;
         }
 
         .document-preview th, .document-preview td {
             border: 1px solid #000000;
-            padding: 1px 3px;
-            font-size: 10px;
-            line-height: 1.1;
+            padding: 4px 3px;
+            font-size: 11px;
+            line-height: 1.2;
+            vertical-align: middle;
+            box-sizing: border-box;
+        }
+
+        .document-preview tr {
+            height: 22px;
         }
 
         .cell-input {
@@ -55,18 +69,75 @@
             border: none;
             outline: none;
             font-family: 'Times New Roman', Times, serif;
-            font-size: 10.5px;
+            font-size: 11px;
             font-weight: bold;
+            display: block;
+            margin: 0;
+            padding: 0;
         }
 
         .cell-input:focus {
             background-color: #e0e7ff;
         }
 
+        /* Styling Toolbar pengatur ukuran TTD & Stempel */
+        .asset-wrapper {
+            position: absolute;
+            display: inline-block;
+            user-select: none;
+            overflow: visible !important;
+        }
+
+        .asset-controls {
+            position: absolute;
+            top: -28px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 3px;
+            background: rgba(15, 23, 42, 0.95);
+            padding: 3px 6px;
+            border-radius: 6px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease, visibility 0.2s ease;
+            z-index: 50;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+        }
+
+        /* Dibuat tetap tampil saat di-hover, diklik, atau aktif agar tombol + / - tidak mendadak hilang */
+        .asset-wrapper:hover .asset-controls,
+        .asset-wrapper:focus-within .asset-controls,
+        .asset-wrapper.active-control .asset-controls,
+        .asset-controls:hover {
+            opacity: 1 !important;
+            pointer-events: auto !important;
+        }
+
+        .asset-btn {
+            color: #ffffff;
+            width: 22px;
+            height: 22px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            background: rgba(255, 255, 255, 0.25);
+            transition: background 0.15s;
+            cursor: pointer;
+        }
+
+        .asset-btn:hover {
+            background: rgba(99, 102, 241, 0.9);
+        }
+
         /* Styling khusus cetak & PDF */
         @media print {
-            .no-print {
+            .no-print, .asset-controls, [id^="wrapper_"] .asset-controls {
                 display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
             }
             body {
                 background: white !important;
@@ -80,17 +151,19 @@
                 width: 100% !important;
             }
             .document-preview {
-                width: 215mm !important;
-                min-height: 330mm !important;
+                width: 205mm !important;
+                min-height: auto !important;
                 box-shadow: none !important;
+                border: none !important;
                 margin: 0 auto !important;
-                padding: 8mm 10mm !important;
+                padding: 10px 15px 10px 3.2cm !important;
             }
         }
     </style>
 </head>
 <body class="min-h-screen pb-12">
 
+    <!-- Header Navigation -->
     <header class="bg-indigo-900 text-white shadow-md sticky top-0 z-40 no-print">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
             <!-- Brand / Title -->
@@ -100,18 +173,23 @@
                 </div>
                 <div>
                     <h1 class="text-base sm:text-lg font-bold leading-tight tracking-wide">Rekap Kehadiran Guru</h1>
+                    <p class="text-[10px] text-indigo-200 font-normal">Dilengkapi Fitur Tanda Tangan (TTD) Otomatis</p>
                 </div>
             </div>
 
-            <!-- Header Action Buttons (Pojok Kanan Atas) -->
+            <!-- Header Action Buttons -->
             <div class="flex items-center gap-2">
                 <button onclick="clearTableData()" class="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold rounded-lg transition flex items-center gap-2 shadow-sm border border-amber-500">
                     <i class="fa-solid fa-eraser text-sm"></i>
                     <span>Bersihkan</span>
                 </button>
-                <button onclick="downloadPDF()" class="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold rounded-lg transition flex items-center gap-2 shadow-sm border border-rose-500">
+                <button onclick="resetElementPositions()" class="px-3 py-2 bg-indigo-700 hover:bg-indigo-600 text-white text-xs font-semibold rounded-lg transition flex items-center gap-1.5 shadow-sm border border-indigo-500" title="Reset posisi TTD & Stempel">
+                    <i class="fa-solid fa-rotate-left text-sm"></i>
+                    <span>Reset Posisi</span>
+                </button>
+                <button onclick="downloadPDF()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg transition flex items-center gap-2 shadow-sm border border-emerald-500">
                     <i class="fa-solid fa-file-pdf text-sm"></i>
-                    <span>Save Pdf</span>
+                    <span>Save PDF</span>
                 </button>
             </div>
         </div>
@@ -124,7 +202,7 @@
             <div class="lg:col-span-4 space-y-4 no-print">
                 <div class="bg-amber-50 rounded-xl border border-amber-200 p-4 text-amber-900 sticky top-20 shadow-sm space-y-3">
                     <h3 class="font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 border-b border-amber-200 pb-2">
-                        <i class="fa-solid fa-sliders text-amber-600"></i> Opsi & Panduan Pengisian Kode
+                        <i class="fa-solid fa-sliders text-amber-600"></i> Opsi & Panduan Pengisian
                     </h3>
 
                     <!-- Pilih Data Guru dari Sheet Guru -->
@@ -141,6 +219,73 @@
                             <option value="" disabled selected>-- Pilih Guru Dari List --</option>
                         </select>
                         <p id="guru-fetch-status" class="text-[10px] text-slate-500 italic">Mengambil data dari Google Sheets...</p>
+                    </div>
+
+                    <!-- Status TTD & Preview Opsional -->
+                    <div class="bg-white p-3 rounded-lg border border-amber-200 space-y-2">
+                        <label class="block text-xs font-bold text-slate-800">
+                            <i class="fa-solid fa-signature text-indigo-600 mr-1"></i> Status TTD (Kolom D) & Stempel (Kolom E):
+                        </label>
+                        <div id="ttd-status-badge" class="text-[11px] p-2 rounded bg-slate-100 text-slate-600 flex items-center justify-between border border-slate-200">
+                            <span>Status TTD Guru:</span>
+                            <span id="ttd-badge-text" class="font-bold text-slate-500">Belum dipilih</span>
+                        </div>
+                        <div id="stempel-status-badge" class="text-[11px] p-2 rounded bg-slate-100 text-slate-600 flex items-center justify-between border border-slate-200">
+                            <span>Status Stempel:</span>
+                            <span id="stempel-badge-text" class="font-bold text-slate-500">Belum dimuat</span>
+                        </div>
+                        <!-- Checkbox Opsi Pakai TTD & Stempel -->
+                        <div class="pt-1.5 border-t border-slate-100 space-y-1">
+                            <div class="flex items-center gap-2">
+                                <input type="checkbox" id="cfg_show_ttd" checked onchange="toggleTTDVisibility()" class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer">
+                                <label for="cfg_show_ttd" class="text-xs font-semibold text-slate-700 cursor-pointer">
+                                    Gunakan Tanda Tangan (TTD)
+                                </label>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input type="checkbox" id="cfg_show_stempel" checked onchange="toggleTTDVisibility()" class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer">
+                                <label for="cfg_show_stempel" class="text-xs font-semibold text-slate-700 cursor-pointer">
+                                    Tampilkan Stempel Sekolah
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Tombol Pintas Pengubah Ukuran Langsung dari Panel -->
+                        <div class="pt-2 border-t border-slate-100 space-y-1.5">
+                            <label class="block text-[10.5px] font-bold text-slate-700">Pintas Ukuran Foto / Asset:</label>
+                            <div class="grid grid-cols-3 gap-1.5 text-[10px]">
+                                <div class="bg-slate-50 p-1.5 rounded border text-center space-y-1">
+                                    <span class="block font-semibold text-slate-600">Stempel</span>
+                                    <div class="flex justify-center gap-1">
+                                        <button onclick="zoomAsset('img_stempel', 1.1)" class="w-5 h-5 bg-indigo-600 text-white rounded font-bold hover:bg-indigo-700">+</button>
+                                        <button onclick="zoomAsset('img_stempel', 0.9)" class="w-5 h-5 bg-indigo-600 text-white rounded font-bold hover:bg-indigo-700">-</button>
+                                    </div>
+                                </div>
+                                <div class="bg-slate-50 p-1.5 rounded border text-center space-y-1">
+                                    <span class="block font-semibold text-slate-600">TTD Kepsek</span>
+                                    <div class="flex justify-center gap-1">
+                                        <button onclick="zoomAsset('img_ttd_kepsek', 1.1)" class="w-5 h-5 bg-indigo-600 text-white rounded font-bold hover:bg-indigo-700">+</button>
+                                        <button onclick="zoomAsset('img_ttd_kepsek', 0.9)" class="w-5 h-5 bg-indigo-600 text-white rounded font-bold hover:bg-indigo-700">-</button>
+                                    </div>
+                                </div>
+                                <div class="bg-slate-50 p-1.5 rounded border text-center space-y-1">
+                                    <span class="block font-semibold text-slate-600">TTD Guru</span>
+                                    <div class="flex justify-center gap-1">
+                                        <button onclick="zoomAsset('img_ttd_guru', 1.1)" class="w-5 h-5 bg-indigo-600 text-white rounded font-bold hover:bg-indigo-700">+</button>
+                                        <button onclick="zoomAsset('img_ttd_guru', 0.9)" class="w-5 h-5 bg-indigo-600 text-white rounded font-bold hover:bg-indigo-700">-</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <p class="text-[10.5px] text-indigo-700 bg-indigo-50 p-2 rounded border border-indigo-100 leading-tight">
+                            <i class="fa-solid fa-up-down-left-right text-indigo-500 mr-1"></i>
+                            <strong>Petunjuk:</strong> Gunakan tombol <b class="bg-indigo-200 px-1 rounded">+</b> dan <b class="bg-indigo-200 px-1 rounded">-</b> di atas atau di panel kiri untuk mengubah ukuran, serta <b>klik & geser</b> TTD/Stempel ke posisi mana saja.
+                        </p>
+                        <div class="pt-1 border-t border-slate-100">
+                            <label class="block text-[10px] font-semibold text-slate-600 mb-1">Unggah TTD Manual (Jika Link Gagal):</label>
+                            <input type="file" id="cfg_upload_ttd" accept="image/*" onchange="handleManualSignatureUpload(event)" class="w-full text-[10px] text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer border border-slate-200 rounded">
+                        </div>
                     </div>
 
                     <!-- Tipe Kelas Selection -->
@@ -195,9 +340,9 @@
                 </div>
             </div>
 
-            <div class="lg:col-span-8 document-container overflow-x-auto">
-                <!-- Printable Page Wrapper (F4 Size Preview: 215mm x 330mm) -->
-                <div id="document-to-print" class="document-preview mx-auto rounded-sm border border-slate-300">
+            <!-- Right Panel: Printable Page Wrapper (F4 Size Preview: 215mm x 330mm) -->
+            <div class="lg:col-span-8 document-container overflow-x-auto px-2 sm:px-4">
+                <div id="document-to-print" class="document-preview mx-auto rounded-sm">
                     
                     <div class="space-y-1.5">
                         <!-- Document Header -->
@@ -222,27 +367,27 @@
                         </div>
 
                         <!-- Table Presisi Kehadiran Jam 1 - 11 -->
-                        <div class="overflow-x-auto pt-0.5">
+                        <div class="overflow-x-auto pt-1">
                             <table class="w-full text-center align-middle">
                                 <thead>
-                                    <tr>
-                                        <th rowspan="2" class="w-6 py-0.5">No</th>
-                                        <th rowspan="2" class="w-32 py-0.5 text-left px-2">Hari / Tanggal</th>
-                                        <th colspan="11" class="py-0.5">Jam Pelajaran</th>
-                                        <th rowspan="2" class="w-20 py-0.5">Keterangan</th>
+                                    <tr style="height: 22px;">
+                                        <th rowspan="2" class="w-8 py-1">No</th>
+                                        <th rowspan="2" class="w-44 py-1 text-left px-2">Hari / Tanggal</th>
+                                        <th colspan="11" class="py-1">Jam Pelajaran</th>
+                                        <th rowspan="2" class="w-28 py-1">Keterangan</th>
                                     </tr>
-                                    <tr>
-                                        <th class="w-4 py-0.5 text-[9px]">1</th>
-                                        <th class="w-4 py-0.5 text-[9px]">2</th>
-                                        <th class="w-4 py-0.5 text-[9px]">3</th>
-                                        <th class="w-4 py-0.5 text-[9px]">4</th>
-                                        <th class="w-4 py-0.5 text-[9px]">5</th>
-                                        <th class="w-4 py-0.5 text-[9px]">6</th>
-                                        <th class="w-4 py-0.5 text-[9px]">7</th>
-                                        <th class="w-4 py-0.5 text-[9px]">8</th>
-                                        <th class="w-4 py-0.5 text-[9px]">9</th>
-                                        <th class="w-4 py-0.5 text-[9px]">10</th>
-                                        <th class="w-4 py-0.5 text-[9px]">11</th>
+                                    <tr style="height: 20px;">
+                                        <th class="w-5 py-0.5 text-[10px]">1</th>
+                                        <th class="w-5 py-0.5 text-[10px]">2</th>
+                                        <th class="w-5 py-0.5 text-[10px]">3</th>
+                                        <th class="w-5 py-0.5 text-[10px]">4</th>
+                                        <th class="w-5 py-0.5 text-[10px]">5</th>
+                                        <th class="w-5 py-0.5 text-[10px]">6</th>
+                                        <th class="w-5 py-0.5 text-[10px]">7</th>
+                                        <th class="w-5 py-0.5 text-[10px]">8</th>
+                                        <th class="w-5 py-0.5 text-[10px]">9</th>
+                                        <th class="w-5 py-0.5 text-[10px]">10</th>
+                                        <th class="w-5 py-0.5 text-[10px]">11</th>
                                     </tr>
                                 </thead>
                                 <tbody id="attendance-body">
@@ -252,35 +397,72 @@
                         </div>
 
                         <!-- Keterangan Legend Section -->
-                        <div id="document-legend" class="text-[9px] space-y-0 leading-tight pt-1">
+                        <div id="document-legend" class="text-[10px] space-y-0.5 leading-snug pt-2">
                             <!-- Dynamic Legend rendered by JS -->
                         </div>
                     </div>
 
-                    <!-- 2 Enter spacing before signature section -->
-                    <div class="pt-2"></div>
+                    <!-- Spacing before signature section -->
+                    <div class="pt-4"></div>
 
-                    <!-- Signature Footer Section (Positioned closely right after legend) -->
-                    <div>
-                        <div class="flex justify-between items-start text-xs font-bold px-2">
+                    <!-- Signature Footer Section (Positions TTD images smoothly above names) -->
+                    <div class="overflow-visible">
+                        <div class="flex justify-between items-start text-xs font-bold px-1 relative min-h-[120px] overflow-visible">
                             <!-- Left Signature (Kepala Sekolah) -->
-                            <div class="text-left w-52 space-y-12">
+                            <div class="text-left w-64 flex flex-col justify-between min-h-[115px] relative overflow-visible">
                                 <div>
                                     <p>Mengetahui:</p>
                                     <p>Kepala Sekolah,</p>
                                 </div>
+                                
+                                <!-- Container Gambar Draggable & Resizable (Kepsek & Stempel) -->
+                                <div class="h-16 relative my-1 overflow-visible">
+                                    <!-- Stempel Wrapper (z-index 30 agar selalu di atas TTD) -->
+                                    <div id="wrapper_stempel" class="asset-wrapper hidden" style="left: -35px; top: -15px; z-index: 30;">
+                                        <div class="asset-controls no-print">
+                                            <button type="button" onclick="zoomAsset('img_stempel', 1.1)" class="asset-btn" title="Perbesar"><i class="fa-solid fa-plus"></i></button>
+                                            <button type="button" onclick="zoomAsset('img_stempel', 0.9)" class="asset-btn" title="Perkecil"><i class="fa-solid fa-minus"></i></button>
+                                            <button type="button" onclick="resetAssetSize('img_stempel')" class="asset-btn" title="Reset Ukuran"><i class="fa-solid fa-rotate-left"></i></button>
+                                        </div>
+                                        <img id="img_stempel" draggable="false" referrerpolicy="no-referrer" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Stempel" class="draggable-asset max-h-20 max-w-[140px] object-contain opacity-85 cursor-grab border border-dashed border-transparent hover:border-amber-400 rounded transition-transform origin-center">
+                                    </div>
+                                    
+                                    <!-- TTD Kepsek Wrapper (z-index 20 di bawah Stempel) -->
+                                    <div id="wrapper_ttd_kepsek" class="asset-wrapper hidden" style="left: 10px; top: 0px; z-index: 20;">
+                                        <div class="asset-controls no-print">
+                                            <button type="button" onclick="zoomAsset('img_ttd_kepsek', 1.1)" class="asset-btn" title="Perbesar"><i class="fa-solid fa-plus"></i></button>
+                                            <button type="button" onclick="zoomAsset('img_ttd_kepsek', 0.9)" class="asset-btn" title="Perkecil"><i class="fa-solid fa-minus"></i></button>
+                                            <button type="button" onclick="resetAssetSize('img_ttd_kepsek')" class="asset-btn" title="Reset Ukuran"><i class="fa-solid fa-rotate-left"></i></button>
+                                        </div>
+                                        <img id="img_ttd_kepsek" draggable="false" referrerpolicy="no-referrer" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="TTD Kepsek" class="draggable-asset max-h-16 max-w-[150px] object-contain cursor-grab border border-dashed border-transparent hover:border-indigo-400 rounded transition-transform origin-center">
+                                    </div>
+                                </div>
+
                                 <div class="space-y-0">
                                     <p id="doc_nama_kepsek" class="font-bold">............</p>
                                     <p class="font-normal text-[10.5px]">NIP. <span id="doc_nip_kepsek">............</span></p>
                                 </div>
                             </div>
 
-                            <!-- Right Signature (Guru) - Shifted slightly left -->
-                            <div class="text-left w-52 space-y-12 pr-12">
+                            <!-- Right Signature (Guru) -->
+                            <div class="text-left w-64 flex flex-col justify-between min-h-[115px] pr-2 relative overflow-visible">
                                 <div class="space-y-0">
                                     <p>&nbsp;</p>
                                     <p id="doc_jabatan_guru">Guru</p>
                                 </div>
+                                
+                                <!-- TTD Image Container Guru (Draggable & Resizable) -->
+                                <div class="h-16 relative my-1 overflow-visible">
+                                    <div id="wrapper_ttd_guru" class="asset-wrapper hidden" style="left: 0px; top: 0px; z-index: 20;">
+                                        <div class="asset-controls no-print">
+                                            <button type="button" onclick="zoomAsset('img_ttd_guru', 1.1)" class="asset-btn" title="Perbesar"><i class="fa-solid fa-plus"></i></button>
+                                            <button type="button" onclick="zoomAsset('img_ttd_guru', 0.9)" class="asset-btn" title="Perkecil"><i class="fa-solid fa-minus"></i></button>
+                                            <button type="button" onclick="resetAssetSize('img_ttd_guru')" class="asset-btn" title="Reset Ukuran"><i class="fa-solid fa-rotate-left"></i></button>
+                                        </div>
+                                        <img id="img_ttd_guru" draggable="false" referrerpolicy="no-referrer" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="TTD Guru" class="draggable-asset max-h-16 max-w-[150px] object-contain cursor-grab border border-dashed border-transparent hover:border-indigo-400 rounded transition-transform origin-center">
+                                    </div>
+                                </div>
+
                                 <div class="space-y-0">
                                     <p id="doc_nama_guru_ttd" class="font-bold">............</p>
                                     <p class="font-normal text-[10.5px]">NIP. <span id="doc_nip_guru">............</span></p>
@@ -309,6 +491,84 @@
     </div>
 
     <script>
+        // Tangkap dan tangani unhandled promise rejections dan error pemuatan elemen secara global
+        window.addEventListener('unhandledrejection', function(event) {
+            if (event) {
+                event.preventDefault();
+                if (typeof event.stopPropagation === 'function') {
+                    event.stopPropagation();
+                }
+            }
+            console.warn('Unhandled promise rejection ditangani dengan aman:', event.reason || event);
+        });
+
+        window.addEventListener('error', function(event) {
+            if (event && event.target && (event.target.tagName === 'IMG' || event.target.tagName === 'SCRIPT')) {
+                event.preventDefault();
+                if (typeof event.stopPropagation === 'function') {
+                    event.stopPropagation();
+                }
+            }
+        }, true);
+
+        // Deklarasi Global Scope untuk Modul Zoom Asset
+        window.assetScales = {
+            img_stempel: 1.0,
+            img_ttd_kepsek: 1.0,
+            img_ttd_guru: 1.0
+        };
+
+        // Simpan dimensi asli masing-masing gambar agar scaling berbasis width/height akurat
+        window.assetBaseDimensions = {};
+
+        window.zoomAsset = function(imgId, factor) {
+            if (!window.assetScales[imgId]) window.assetScales[imgId] = 1.0;
+            window.assetScales[imgId] = Math.max(0.4, Math.min(2.8, window.assetScales[imgId] * factor));
+            
+            const img = document.getElementById(imgId);
+            if (img) {
+                // Catat ukuran awal (base size) jika belum ada
+                if (!window.assetBaseDimensions[imgId]) {
+                    window.assetBaseDimensions[imgId] = {
+                        width: img.offsetWidth || img.naturalWidth || 120,
+                        height: img.offsetHeight || img.naturalHeight || 70
+                    };
+                }
+
+                const base = window.assetBaseDimensions[imgId];
+                const scale = window.assetScales[imgId];
+
+                // Ubah dimensi langsung pada width & height (Presisi untuk html2canvas PDF)
+                img.style.width = `${Math.round(base.width * scale)}px`;
+                img.style.height = 'auto';
+                img.style.maxHeight = 'none';
+                img.style.maxWidth = 'none';
+                img.style.transform = 'none'; // Bersihkan CSS transform scale untuk cegah distorsi PDF
+            }
+
+            const wrapper = document.getElementById(`wrapper_${imgId.replace('img_', '')}`);
+            if (wrapper) {
+                wrapper.classList.add('active-control');
+                setTimeout(() => wrapper.classList.remove('active-control'), 3000);
+            }
+        };
+
+        window.resetAssetSize = function(imgId) {
+            window.assetScales[imgId] = 1.0;
+            const img = document.getElementById(imgId);
+            if (img) {
+                if (window.assetBaseDimensions[imgId]) {
+                    img.style.width = `${window.assetBaseDimensions[imgId].width}px`;
+                } else {
+                    img.style.width = '';
+                }
+                img.style.height = '';
+                img.style.maxHeight = '';
+                img.style.maxWidth = '';
+                img.style.transform = 'none';
+            }
+        };
+
         const monthNames = [
             "Januari", "Februari", "Maret", "April", "Mei", "Juni",
             "Juli", "Agustus", "September", "Oktober", "November", "Desember"
@@ -356,10 +616,18 @@
 
         let activeInputCell = null;
         let teacherListOnly = [];
+        let showTTD = true;
+        let showStempel = true;
+        let assetScales = {
+            img_stempel: 1.0,
+            img_ttd_kepsek: 1.0,
+            img_ttd_guru: 1.0
+        };
         let selectedTeacherData = {
             nama: "",
             nip: "",
-            jabatan: ""
+            jabatan: "",
+            ttd: ""
         };
 
         window.addEventListener('DOMContentLoaded', () => {
@@ -367,36 +635,344 @@
             generateDates();
             updateDocument();
             fetchSpreadsheetData();
+            initDraggableElements();
         });
+
+        // Modul Drag & Drop untuk menggeser TTD & Stempel
+        function initDraggableElements() {
+            const wrappers = document.querySelectorAll('.asset-wrapper');
+            wrappers.forEach(wrapper => {
+                let isDragging = false;
+                let startX, startY, initialLeft, initialTop;
+
+                // Memastikan toolbar tidak mudah hilang saat diklik
+                wrapper.addEventListener('click', (e) => {
+                    wrappers.forEach(w => w.classList.remove('active-control'));
+                    wrapper.classList.add('active-control');
+                });
+
+                const onStart = (e) => {
+                    // Hindari menggeser jika menekan tombol kontrol zoom
+                    if (e.target.closest('.asset-controls')) return;
+
+                    isDragging = true;
+                    wrapper.classList.add('cursor-grabbing');
+                    const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+                    const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+                    
+                    startX = clientX;
+                    startY = clientY;
+
+                    initialLeft = parseInt(window.getComputedStyle(wrapper).left) || 0;
+                    initialTop = parseInt(window.getComputedStyle(wrapper).top) || 0;
+                };
+
+                const onMove = (e) => {
+                    if (!isDragging) return;
+                    e.preventDefault();
+                    const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+                    const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+
+                    const dx = clientX - startX;
+                    const dy = clientY - startY;
+
+                    wrapper.style.left = `${initialLeft + dx}px`;
+                    wrapper.style.top = `${initialTop + dy}px`;
+                };
+
+                const onEnd = () => {
+                    isDragging = false;
+                    wrapper.classList.remove('cursor-grabbing');
+                };
+
+                wrapper.addEventListener('mousedown', onStart);
+                window.addEventListener('mousemove', onMove);
+                window.addEventListener('mouseup', onEnd);
+
+                wrapper.addEventListener('touchstart', onStart, { passive: false });
+                window.addEventListener('touchmove', onMove, { passive: false });
+                window.addEventListener('touchend', onEnd);
+            });
+        }
+
+        function resetElementPositions() {
+            const wKepsek = document.getElementById('wrapper_ttd_kepsek');
+            const wGuru = document.getElementById('wrapper_ttd_guru');
+            const wStempel = document.getElementById('wrapper_stempel');
+
+            if (wKepsek) { wKepsek.style.left = '10px'; wKepsek.style.top = '0px'; }
+            if (wGuru) { wGuru.style.left = '0px'; wGuru.style.top = '0px'; }
+            if (wStempel) { wStempel.style.left = '-35px'; wStempel.style.top = '-15px'; }
+
+            resetAssetSize('img_stempel');
+            resetAssetSize('img_ttd_kepsek');
+            resetAssetSize('img_ttd_guru');
+
+            showAlert("Posisi dan ukuran TTD serta Stempel berhasil dikembalikan ke posisi semula.", "success");
+        }
+
+        function toggleTTDVisibility() {
+            const chkTTD = document.getElementById('cfg_show_ttd');
+            const chkStempel = document.getElementById('cfg_show_stempel');
+
+            showTTD = chkTTD ? chkTTD.checked : true;
+            showStempel = chkStempel ? chkStempel.checked : true;
+
+            const wGuru = document.getElementById('wrapper_ttd_guru');
+            const wKepsek = document.getElementById('wrapper_ttd_kepsek');
+            const wStempel = document.getElementById('wrapper_stempel');
+
+            // Handle visibility TTD Guru & Kepsek
+            if (!showTTD) {
+                if (wGuru) wGuru.classList.add('hidden');
+                if (wKepsek) wKepsek.classList.add('hidden');
+                const badge = document.getElementById('ttd-badge-text');
+                if (badge) {
+                    badge.innerText = "Dinonaktifkan";
+                    badge.className = "font-bold text-amber-600";
+                }
+            } else {
+                updateDocument();
+                const docKepsek = document.getElementById('doc_nama_kepsek');
+                if (docKepsek && docKepsek.dataset.ttd) {
+                    loadSignatureImage(docKepsek.dataset.ttd, 'img_ttd_kepsek', 'wrapper_ttd_kepsek');
+                }
+            }
+
+            // Handle visibility Stempel
+            if (!showStempel) {
+                if (wStempel) wStempel.classList.add('hidden');
+                const badgeStempel = document.getElementById('stempel-badge-text');
+                if (badgeStempel) {
+                    badgeStempel.innerText = "Dinonaktifkan";
+                    badgeStempel.className = "font-bold text-amber-600";
+                }
+            } else {
+                const docKepsek = document.getElementById('doc_nama_kepsek');
+                if (docKepsek && docKepsek.dataset.stempel) {
+                    loadSignatureImage(docKepsek.dataset.stempel, 'img_stempel', 'wrapper_stempel', 'stempel-badge-text');
+                }
+            }
+        }
+
+        // Helper function to extract Google Drive file ID
+        function extractDriveFileId(url) {
+            if (!url || typeof url !== 'string') return '';
+            url = url.trim().replace(/^["']|["']$/g, '');
+            if (!url) return '';
+
+            if (url.startsWith('data:image')) return 'DATA_URI';
+
+            const matchFile = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+            if (matchFile && matchFile[1]) return matchFile[1];
+
+            const matchId = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+            if (matchId && matchId[1]) return matchId[1];
+
+            return '';
+        }
+
+        // Helper to generate candidate image URLs for Google Drive
+        function getDriveUrls(url) {
+            if (!url) return [];
+            url = url.trim().replace(/^["']|["']$/g, '');
+            if (url.startsWith('data:image')) return [url];
+
+            const fileId = extractDriveFileId(url);
+            if (fileId === 'DATA_URI') return [url];
+
+            if (fileId) {
+                return [
+                    `https://lh3.googleusercontent.com/d/${fileId}`,
+                    `https://drive.google.com/uc?export=view&id=${fileId}`,
+                    `https://drive.google.com/thumbnail?id=${fileId}&sz=w500`,
+                    `https://wsrv.nl/?url=https://drive.google.com/uc?export=view%26id=${fileId}`
+                ];
+            }
+
+            if (url.startsWith('http://') || url.startsWith('https://')) {
+                return [
+                    url,
+                    `https://wsrv.nl/?url=${encodeURIComponent(url)}`
+                ];
+            }
+
+            return [];
+        }
+
+        // Helper to load signature/stempel image directly onto DOM
+        function loadSignatureImage(rawUrl, imgElementId, wrapperId, badgeTargetId = null) {
+            const imgEl = document.getElementById(imgElementId);
+            const wrapperEl = document.getElementById(wrapperId);
+            if (!imgEl || !wrapperEl) return;
+
+            if ((!showTTD && (imgElementId === 'img_ttd_guru' || imgElementId === 'img_ttd_kepsek')) ||
+                (!showStempel && imgElementId === 'img_stempel')) {
+                imgEl.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+                wrapperEl.classList.add('hidden');
+                if (badgeTargetId) {
+                    const badge = document.getElementById(badgeTargetId);
+                    if (badge) {
+                        badge.innerText = "Dinonaktifkan";
+                        badge.className = "font-bold text-amber-600";
+                    }
+                }
+                return;
+            }
+
+            const cleanUrl = (rawUrl || '').trim();
+            if (!cleanUrl) {
+                imgEl.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+                wrapperEl.classList.add('hidden');
+                if (badgeTargetId) {
+                    const badge = document.getElementById(badgeTargetId);
+                    if (badge) {
+                        badge.innerText = "Tidak Tersedia";
+                        badge.className = "font-bold text-slate-400";
+                    }
+                }
+                return;
+            }
+
+            const urls = getDriveUrls(cleanUrl);
+            if (!urls || urls.length === 0) {
+                imgEl.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+                wrapperEl.classList.add('hidden');
+                if (badgeTargetId) {
+                    const badge = document.getElementById(badgeTargetId);
+                    if (badge) {
+                        badge.innerText = "Tidak Tersedia";
+                        badge.className = "font-bold text-slate-400";
+                    }
+                }
+                return;
+            }
+
+            if (badgeTargetId) {
+                const badge = document.getElementById(badgeTargetId);
+                if (badge) {
+                    badge.innerText = "Memuat...";
+                    badge.className = "font-bold text-indigo-600 animate-pulse";
+                }
+            }
+
+            let candidateIdx = 0;
+
+            function tryNextUrl() {
+                if (candidateIdx < urls.length) {
+                    const currentUrl = urls[candidateIdx];
+                    candidateIdx++;
+
+                    imgEl.onload = function() {
+                        const isTTDHidden = !showTTD && (imgElementId === 'img_ttd_guru' || imgElementId === 'img_ttd_kepsek');
+                        const isStempelHidden = !showStempel && imgElementId === 'img_stempel';
+                        
+                        if (isTTDHidden || isStempelHidden) {
+                            wrapperEl.classList.add('hidden');
+                            return;
+                        }
+
+                        // Catat dimensi dasar setelah gambar dimuat
+                        setTimeout(() => {
+                            window.assetBaseDimensions[imgElementId] = {
+                                width: imgEl.offsetWidth || imgEl.naturalWidth || 120,
+                                height: imgEl.offsetHeight || imgEl.naturalHeight || 70
+                            };
+                        }, 100);
+
+                        wrapperEl.classList.remove('hidden');
+                        if (badgeTargetId) {
+                            const badge = document.getElementById(badgeTargetId);
+                            if (badge) {
+                                badge.innerText = "Tersedia";
+                                badge.className = "font-bold text-emerald-600";
+                            }
+                        }
+                    };
+
+                    imgEl.onerror = function() {
+                        tryNextUrl();
+                    };
+
+                    imgEl.src = currentUrl;
+                } else {
+                    imgEl.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+                    wrapperEl.classList.add('hidden');
+                    if (badgeTargetId) {
+                        const badge = document.getElementById(badgeTargetId);
+                        if (badge) {
+                            badge.innerText = "Gagal (Akses Terkunci)";
+                            badge.className = "font-bold text-rose-600";
+                        }
+                    }
+                }
+            }
+
+            tryNextUrl();
+        }
 
         async function fetchSpreadsheetData() {
             const statusEl = document.getElementById('guru-fetch-status');
             const selectEl = document.getElementById('cfg_select_guru');
 
-            statusEl.innerText = "Mengambil data dari Google Sheets...";
-            statusEl.className = "text-[10px] text-indigo-600 italic";
+            if (statusEl) {
+                statusEl.innerText = "Mengambil data dari Google Sheets...";
+                statusEl.className = "text-[10px] text-indigo-600 italic";
+            }
             
             const spreadsheetId = '1dHd8-ixTrO8kjj_ThpKcE5BZX5c5SnVRS2m6PSzpwMg';
-            const csvGuruUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Guru')}`;
+            const csvUrlBase = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Guru')}`;
+            
+            // Multiple CORS proxies for robust fetching
+            const fetchUrls = [
+                csvUrlBase,
+                `https://corsproxy.io/?${encodeURIComponent(csvUrlBase)}`,
+                `https://api.allorigins.win/raw?url=${encodeURIComponent(csvUrlBase)}`
+            ];
 
-            try {
-                const resGuru = await fetch(csvGuruUrl);
-                if (resGuru.ok) {
-                    const csvText = await resGuru.text();
-                    const allRows = parseCSV(csvText);
-                    
-                    teacherListOnly = [];
-                    allRows.forEach(row => {
-                        const jabLower = (row.jabatan || '').toLowerCase();
-                        const namaLower = (row.nama || '').toLowerCase();
-                        if (jabLower.includes('kepala sekolah') || namaLower.includes('kepala sekolah')) {
-                            if (row.nama) document.getElementById('doc_nama_kepsek').innerText = row.nama;
-                            if (row.nip) document.getElementById('doc_nip_kepsek').innerText = row.nip;
-                        } else {
-                            teacherListOnly.push(row);
+            let csvText = null;
+
+            for (const url of fetchUrls) {
+                try {
+                    const res = await fetch(url, { cache: "no-cache" });
+                    if (res && res.ok) {
+                        const txt = await res.text();
+                        if (txt && txt.trim().length > 10) {
+                            csvText = txt;
+                            break;
                         }
-                    });
+                    }
+                } catch (e) {
+                    console.warn("Spreadsheet fetch failed on:", url, e);
+                }
+            }
 
+            if (csvText) {
+                const allRows = parseCSV(csvText);
+                
+                teacherListOnly = [];
+                allRows.forEach(row => {
+                    const jabLower = (row.jabatan || '').toLowerCase();
+                    const namaLower = (row.nama || '').toLowerCase();
+                    if (jabLower.includes('kepala sekolah') || namaLower.includes('kepala sekolah')) {
+                        const elKepsek = document.getElementById('doc_nama_kepsek');
+                        if (row.nama) elKepsek.innerText = row.nama;
+                        if (row.nip) document.getElementById('doc_nip_kepsek').innerText = row.nip;
+                        
+                        if (row.ttd) {
+                            elKepsek.dataset.ttd = row.ttd;
+                            if (showTTD) loadSignatureImage(row.ttd, 'img_ttd_kepsek', 'wrapper_ttd_kepsek');
+                        }
+                        if (row.stempel) {
+                            elKepsek.dataset.stempel = row.stempel;
+                            if (showStempel) loadSignatureImage(row.stempel, 'img_stempel', 'wrapper_stempel', 'stempel-badge-text');
+                        }
+                    } else {
+                        teacherListOnly.push(row);
+                    }
+                });
+
+                if (selectEl) {
                     selectEl.innerHTML = '<option value="" disabled selected>-- Pilih Guru Dari List --</option>';
                     teacherListOnly.forEach((guru, idx) => {
                         const opt = document.createElement('option');
@@ -406,12 +982,15 @@
                     });
                 }
 
-                statusEl.innerText = `Berhasil memuat data spreadsheet.`;
-                statusEl.className = "text-[10px] text-emerald-600 font-medium";
-            } catch (err) {
-                console.error("Error fetching spreadsheet:", err);
-                statusEl.innerText = "Gagal memuat spreadsheet. Menggunakan data bawaan.";
-                statusEl.className = "text-[10px] text-rose-600 font-medium";
+                if (statusEl) {
+                    statusEl.innerText = `Berhasil memuat data spreadsheet.`;
+                    statusEl.className = "text-[10px] text-emerald-600 font-medium";
+                }
+            } else {
+                if (statusEl) {
+                    statusEl.innerText = "Gagal memuat spreadsheet. Menggunakan data bawaan.";
+                    statusEl.className = "text-[10px] text-rose-600 font-medium";
+                }
             }
         }
 
@@ -443,6 +1022,10 @@
             const idxNama = headers.findIndex(h => h.includes('nama'));
             const idxNip = headers.findIndex(h => h.includes('nip'));
             const idxJabatan = headers.findIndex(h => h.includes('jabatan') || h.includes('mapel') || h.includes('kelas') || h.includes('keterangan'));
+            
+            // Kolom D = TTD (index 3), Kolom E = Stempel (index 4)
+            let idxTtd = headers.findIndex(h => h.includes('ttd') || h.includes('tanda') || h.includes('link') || h.includes('gambar') || h.includes('signature'));
+            let idxStempel = headers.findIndex(h => h.includes('stempel') || h.includes('cap') || h.includes('stamp'));
 
             const idxNamaKepsek = headers.findIndex(h => h.includes('kepala') || h.includes('kepsek') || (h.includes('nama') && h.includes('kepala')));
             const idxNipKepsek = headers.findIndex(h => h.includes('nip') && (h.includes('kepala') || h.includes('kepsek')));
@@ -455,21 +1038,35 @@
                 const nama = idxNama !== -1 ? cols[idxNama] : cols[0] || '';
                 const nip = idxNip !== -1 ? cols[idxNip] : cols[1] || '';
                 const jabatan = idxJabatan !== -1 ? cols[idxJabatan] : cols[2] || '';
+                const ttd = cols[3] || (idxTtd !== -1 ? cols[idxTtd] : '');
+                const stempel = cols[4] || (idxStempel !== -1 ? cols[idxStempel] : '');
                 
                 const namaKepsek = idxNamaKepsek !== -1 ? cols[idxNamaKepsek] : '';
                 const nipKepsek = idxNipKepsek !== -1 ? cols[idxNipKepsek] : '';
 
                 const jabLower = jabatan.toLowerCase();
+                const namaLower = nama.toLowerCase();
 
-                if (namaKepsek || jabLower.includes('kepala sekolah')) {
-                    if (namaKepsek) document.getElementById('doc_nama_kepsek').innerText = namaKepsek;
-                    else if (nama) document.getElementById('doc_nama_kepsek').innerText = nama;
+                if (namaKepsek || jabLower.includes('kepala sekolah') || namaLower.includes('kepala sekolah')) {
+                    const elKepsek = document.getElementById('doc_nama_kepsek');
+                    if (namaKepsek) elKepsek.innerText = namaKepsek;
+                    else if (nama) elKepsek.innerText = nama;
+                    
                     if (nipKepsek) document.getElementById('doc_nip_kepsek').innerText = nipKepsek;
                     else if (nip) document.getElementById('doc_nip_kepsek').innerText = nip;
+                    
+                    if (ttd) {
+                        elKepsek.dataset.ttd = ttd;
+                        if (showTTD) loadSignatureImage(ttd, 'img_ttd_kepsek', 'wrapper_ttd_kepsek');
+                    }
+                    if (stempel) {
+                        elKepsek.dataset.stempel = stempel;
+                        if (showStempel) loadSignatureImage(stempel, 'img_stempel', 'wrapper_stempel', 'stempel-badge-text');
+                    }
                 }
 
                 if (nama) {
-                    result.push({ nama, nip, jabatan });
+                    result.push({ nama, nip, jabatan, ttd, stempel });
                 }
             }
             return result;
@@ -485,9 +1082,34 @@
             selectedTeacherData.nama = selectedGuru.nama || '';
             selectedTeacherData.nip = selectedGuru.nip || '';
             selectedTeacherData.jabatan = selectedGuru.jabatan || '';
+            selectedTeacherData.ttd = selectedGuru.ttd || '';
 
             syncClassWithGuruJabatan(selectedTeacherData.jabatan);
             updateDocument();
+        }
+
+        function handleManualSignatureUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const dataUrl = e.target.result;
+                    selectedTeacherData.ttd = dataUrl;
+                    
+                    const imgGuru = document.getElementById('img_ttd_guru');
+                    const wGuru = document.getElementById('wrapper_ttd_guru');
+                    imgGuru.src = dataUrl;
+                    if (wGuru) wGuru.classList.remove('hidden');
+
+                    const badgeText = document.getElementById('ttd-badge-text');
+                    if (badgeText) {
+                        badgeText.innerText = "Manual (Data URL)";
+                        badgeText.className = "font-bold text-indigo-600";
+                    }
+                    showAlert("Tanda tangan manual berhasil diunggah!", "success");
+                };
+                reader.readAsDataURL(file);
+            }
         }
 
         function syncClassWithGuruJabatan(jabatan) {
@@ -649,6 +1271,24 @@
                 document.getElementById('doc_subjudul').innerText = `DALAM .......`;
                 document.getElementById('doc_jabatan_guru').innerText = `Guru`;
             }
+
+            // Muat TTD Guru
+            if (selectedTeacherData.ttd && selectedTeacherData.ttd.trim()) {
+                loadSignatureImage(selectedTeacherData.ttd, 'img_ttd_guru', 'wrapper_ttd_guru', 'ttd-badge-text');
+            } else {
+                const imgGuru = document.getElementById('img_ttd_guru');
+                const wGuru = document.getElementById('wrapper_ttd_guru');
+                if (imgGuru) {
+                    imgGuru.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+                }
+                if (wGuru) wGuru.classList.add('hidden');
+                
+                const badgeText = document.getElementById('ttd-badge-text');
+                if (badgeText) {
+                    badgeText.innerText = "Tidak Tersedia";
+                    badgeText.className = "font-bold text-slate-400";
+                }
+            }
         }
 
         function generateDates() {
@@ -762,29 +1402,196 @@
             showAlert("Semua isian kehadiran pada tabel telah dibersihkan.", "success");
         }
 
-        function downloadPDF() {
-            const element = document.getElementById('document-to-print');
+        // Helper untuk mengubah elemen <img> menjadi Data URI murni menggunakan canvas lokal di layar
+        function convertImgToDataURI(imgEl) {
+            return new Promise((resolve) => {
+                if (!imgEl || imgEl.closest('.asset-wrapper')?.classList.contains('hidden') || !imgEl.src || imgEl.src.startsWith('data:image/gif')) {
+                    resolve(null);
+                    return;
+                }
+                
+                // Jika sudah Base64 lokal, langsung kembalikan
+                if (imgEl.src.startsWith('data:image/png') || imgEl.src.startsWith('data:image/jpeg')) {
+                    resolve(imgEl.src);
+                    return;
+                }
+
+                try {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    const w = imgEl.naturalWidth || imgEl.width || 150;
+                    const h = imgEl.naturalHeight || imgEl.height || 70;
+                    
+                    canvas.width = w;
+                    canvas.height = h;
+
+                    const tempImg = new Image();
+                    tempImg.crossOrigin = 'anonymous';
+                    
+                    tempImg.onload = function() {
+                        try {
+                            ctx.drawImage(tempImg, 0, 0, w, h);
+                            resolve(canvas.toDataURL('image/png'));
+                        } catch (e) {
+                            // Fallback jika terkena CORS taint
+                            resolve(null);
+                        }
+                    };
+
+                    tempImg.onerror = function() {
+                        // Jika fetch langsung gagal CORS, coba gunakan proxy wsrv.nl
+                        const proxyImg = new Image();
+                        proxyImg.crossOrigin = 'anonymous';
+                        proxyImg.onload = function() {
+                            try {
+                                ctx.drawImage(proxyImg, 0, 0, w, h);
+                                resolve(canvas.toDataURL('image/png'));
+                            } catch(err) {
+                                resolve(null);
+                            }
+                        };
+                        proxyImg.onerror = function() { resolve(null); };
+                        proxyImg.src = `https://wsrv.nl/?url=${encodeURIComponent(imgEl.src)}`;
+                    };
+
+                    tempImg.src = imgEl.src;
+                } catch(e) {
+                    resolve(null);
+                }
+            });
+        }
+
+        // Fungsi Download PDF Stabil & Rapi (Presisi 1:1 Tampilan Dashboard)
+        async function downloadPDF() {
             const teacherNameRaw = selectedTeacherData.nama || "Guru";
             const cleanGuruName = teacherNameRaw.replace(/[^a-zA-Z0-9]/g, "_");
             const bulanIdx = parseInt(document.getElementById('cfg_bulan').value);
             const tahun = document.getElementById('cfg_tahun').value;
             const filename = `Rekap_Kehadiran_${cleanGuruName}_${monthNames[bulanIdx]}_${tahun}.pdf`;
 
+            const element = document.getElementById('document-to-print');
+            if (!element) return;
+
+            // 1. Sembunyikan semua toolbar tombol kontrol (+, -, reset) & hilangkan border drag
+            const assetControls = element.querySelectorAll('.asset-controls');
+            assetControls.forEach(ctrl => {
+                ctrl.style.display = 'none';
+                ctrl.style.opacity = '0';
+                ctrl.style.visibility = 'hidden';
+            });
+
+            const wrappers = element.querySelectorAll('.asset-wrapper');
+            wrappers.forEach(w => w.classList.remove('active-control'));
+
+            const draggables = element.querySelectorAll('.draggable-asset');
+            draggables.forEach(img => {
+                img.style.border = 'none';
+                img.style.outline = 'none';
+            });
+
+            // 2. Konversi gambar TTD & Stempel ke Data URI murni secara aman
+            const imgKepsek = document.getElementById('img_ttd_kepsek');
+            const imgGuru = document.getElementById('img_ttd_guru');
+            const imgStempel = document.getElementById('img_stempel');
+
+            let b64Kepsek = null, b64Guru = null, b64Stempel = null;
+            try {
+                [b64Kepsek, b64Guru, b64Stempel] = await Promise.all([
+                    convertImgToDataURI(imgKepsek).catch(() => null),
+                    convertImgToDataURI(imgGuru).catch(() => null),
+                    convertImgToDataURI(imgStempel).catch(() => null)
+                ]);
+            } catch (err) {
+                console.warn("Gagal konversi gambar TTD/Stempel:", err);
+            }
+
+            const origSrcKepsek = imgKepsek ? imgKepsek.src : '';
+            const origSrcGuru = imgGuru ? imgGuru.src : '';
+            const origSrcStempel = imgStempel ? imgStempel.src : '';
+
+            if (b64Kepsek && imgKepsek) imgKepsek.src = b64Kepsek;
+            if (b64Guru && imgGuru) imgGuru.src = b64Guru;
+            if (b64Stempel && imgStempel) imgStempel.src = b64Stempel;
+
+            // 3. Set value input tabel secara eksplisit agar teks isian ikut tercetak sempurna
             const inputs = element.querySelectorAll('input');
             inputs.forEach(input => {
                 input.setAttribute('value', input.value);
             });
 
-            // F4 dimensions in mm: 215 x 330, exact single page fit
             const opt = {
-                margin:       [4, 4, 4, 4],
-                filename:     filename,
-                image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { scale: 2, useCORS: true, logging: false },
-                jsPDF:        { unit: 'mm', format: [215, 330], orientation: 'portrait' }
+                margin: [5, 5, 5, 5], // 0.5 cm margin
+                filename: filename,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: {
+                    scale: 2,
+                    useCORS: true,
+                    allowTaint: true,
+                    logging: false,
+                    backgroundColor: '#ffffff',
+                    scrollX: 0,
+                    scrollY: 0,
+                    windowWidth: 1200,
+                    onclone: (clonedDoc) => {
+                        // Sembunyikan total tombol kontrol pada dokumen clone
+                        const clonedControls = clonedDoc.querySelectorAll('.asset-controls, .no-print');
+                        clonedControls.forEach(c => {
+                            c.style.display = 'none';
+                            c.style.opacity = '0';
+                            c.style.visibility = 'hidden';
+                        });
+                    }
+                },
+                jsPDF: {
+                    unit: 'mm',
+                    format: [215, 330], // Ukuran Kertas F4
+                    orientation: 'portrait'
+                }
             };
 
-            html2pdf().set(opt).from(element).save();
+            window.scrollTo(0, 0);
+
+            try {
+                await html2pdf().set(opt).from(element).save();
+
+                // Restore kondisi tampilan UI di browser
+                if (imgKepsek) imgKepsek.src = origSrcKepsek;
+                if (imgGuru) imgGuru.src = origSrcGuru;
+                if (imgStempel) imgStempel.src = origSrcStempel;
+
+                assetControls.forEach(ctrl => {
+                    ctrl.style.display = '';
+                    ctrl.style.opacity = '';
+                    ctrl.style.visibility = '';
+                });
+
+                draggables.forEach(img => {
+                    img.style.border = '';
+                    img.style.outline = '';
+                });
+
+                showAlert("Dokumen Rekap Kehadiran (PDF F4) berhasil diunduh!", "success");
+            } catch (err) {
+                console.error("Gagal mendownload PDF:", err);
+
+                if (imgKepsek) imgKepsek.src = origSrcKepsek;
+                if (imgGuru) imgGuru.src = origSrcGuru;
+                if (imgStempel) imgStempel.src = origSrcStempel;
+
+                assetControls.forEach(ctrl => {
+                    ctrl.style.display = '';
+                    ctrl.style.opacity = '';
+                    ctrl.style.visibility = '';
+                });
+
+                draggables.forEach(img => {
+                    img.style.border = '';
+                    img.style.outline = '';
+                });
+
+                showAlert("Terjadi kendala saat menyimpan PDF. Silakan coba lagi.", "warning");
+            }
         }
     </script>
 </body>
